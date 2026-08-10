@@ -40,7 +40,7 @@ class VerifyView(discord.ui.View):
 
     @discord.ui.button(
         label="Enter the Network",
-        emoji="✓",
+        emoji="✅",
         style=discord.ButtonStyle.success,
         custom_id="realspidy_verify_button"
     )
