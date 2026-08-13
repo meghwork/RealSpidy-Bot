@@ -22,7 +22,8 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 VERIFY_CHANNEL_ID = 1489640453023469659
 WEBBOUND_ROLE_ID = 1489268339736838405
 WELCOME_CHANNEL_ID = 1489264475100938490
-
+RULES_CHANNEL_ID = 1489262765586780170
+SERVER_ID = 1489257798729596999
 
 # =========================================================
 # FILES
@@ -64,6 +65,32 @@ class VerifyView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
+    # =========================
+    # READ RULES BUTTON
+    # =========================
+
+    @discord.ui.button(
+        label="Read Rules",
+        emoji="📖",
+        style=discord.ButtonStyle.secondary,
+        custom_id="realspidy_rules_button"
+    )
+    async def rules_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
+        await interaction.response.send_message(
+            f"📖 Please read the server rules here: "
+            f"<#{RULES_CHANNEL_ID}>",
+            ephemeral=True
+        )
+
+    # =========================
+    # VERIFY BUTTON
+    # =========================
+
     @discord.ui.button(
         label="Enter the Network",
         emoji="✅",
@@ -99,7 +126,6 @@ class VerifyView(discord.ui.View):
 
         member = interaction.user
 
-        # Already verified
         if role in member.roles:
             await interaction.response.send_message(
                 "✅ You're already part of RealSpidy.",
@@ -142,7 +168,6 @@ class VerifyView(discord.ui.View):
             print(f"VERIFICATION ERROR: {error}")
 
             if not interaction.response.is_done():
-
                 await interaction.response.send_message(
                     "❌ Something went wrong while verifying you.",
                     ephemeral=True
