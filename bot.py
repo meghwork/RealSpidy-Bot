@@ -6,44 +6,48 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 
-# =========================
-# LOAD ENVIRONMENT VARIABLES
-# =========================
+# =========================================================
+# ENVIRONMENT
+# =========================================================
 
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 
-# =========================
-# SERVER IDs
-# =========================
+# =========================================================
+# REALSPIDY IDs
+# =========================================================
 
 VERIFY_CHANNEL_ID = 1489640453023469659
 WEBBOUND_ROLE_ID = 1489268339736838405
 WELCOME_CHANNEL_ID = 1489264475100938490
 
 
-# =========================
-# FILE PATHS
-# =========================
+# =========================================================
+# FILES
+# =========================================================
 
 BASE_DIR = Path(__file__).resolve().parent
 WELCOME_GIF = BASE_DIR / "welcome.gif"
 
 
-# =========================
-# BOT INTENTS
-# =========================
+# =========================================================
+# INTENTS
+# =========================================================
 
 intents = discord.Intents.default()
 
-# Needed for !setupverify
+# Needed for !setupverify and !testwelcome
 intents.message_content = True
 
-# Needed for member join welcome messages
+# Needed for on_member_join
 intents.members = True
 
+
+# =========================================================
+# BOT
+# =========================================================
 
 bot = commands.Bot(
     command_prefix="!",
@@ -51,11 +55,12 @@ bot = commands.Bot(
 )
 
 
-# =========================
-# VERIFY BUTTON
-# =========================
+# =========================================================
+# VERIFICATION VIEW
+# =========================================================
 
 class VerifyView(discord.ui.View):
+
     def __init__(self):
         super().__init__(timeout=None)
 
@@ -73,7 +78,7 @@ class VerifyView(discord.ui.View):
 
         if interaction.guild is None:
             await interaction.response.send_message(
-                "This button only works inside RealSpidy.",
+                "❌ This button only works inside RealSpidy.",
                 ephemeral=True
             )
             return
@@ -81,6 +86,11 @@ class VerifyView(discord.ui.View):
         role = interaction.guild.get_role(WEBBOUND_ROLE_ID)
 
         if role is None:
+            print(
+                f"ERROR: Webbound role {WEBBOUND_ROLE_ID} "
+                "could not be found."
+            )
+
             await interaction.response.send_message(
                 "❌ Webbound role could not be found.",
                 ephemeral=True
@@ -98,9 +108,15 @@ class VerifyView(discord.ui.View):
             return
 
         try:
+
             await member.add_roles(
                 role,
                 reason="RealSpidy verification"
+            )
+
+            print(
+                f"VERIFIED: {member} ({member.id}) "
+                f"received {role.name}"
             )
 
             await interaction.response.send_message(
@@ -110,59 +126,100 @@ class VerifyView(discord.ui.View):
             )
 
         except discord.Forbidden:
+
+            print(
+                "VERIFICATION ERROR: RealSpidy does not have "
+                "permission to assign the Webbound role."
+            )
+
             await interaction.response.send_message(
                 "❌ I don't have permission to give you access.",
                 ephemeral=True
             )
 
         except Exception as error:
-            print(f"Verification Error: {error}")
+
+            print(f"VERIFICATION ERROR: {error}")
 
             if not interaction.response.is_done():
+
                 await interaction.response.send_message(
                     "❌ Something went wrong while verifying you.",
                     ephemeral=True
                 )
 
 
-# =========================
-# BOT STARTUP
-# =========================
+# =========================================================
+# STARTUP
+# =========================================================
 
 @bot.event
 async def setup_hook():
 
-    # Keeps the verification button working
-    # even after the bot restarts.
+    # Keeps verification button working after restart
     bot.add_view(VerifyView())
 
 
 @bot.event
 async def on_ready():
 
-    print("=" * 45)
-    print(f"Logged in as {bot.user}")
+    print("")
+    print("=" * 50)
+    print(f"Logged in as: {bot.user}")
+    print(f"Bot ID: {bot.user.id}")
+    print("")
     print("RealSpidy verification system is ready.")
     print("RealSpidy welcome system is ready.")
-    print("=" * 45)
+    print("")
+    print(f"Welcome GIF path: {WELCOME_GIF}")
+    print(f"Welcome GIF exists: {WELCOME_GIF.exists()}")
+    print("=" * 50)
+    print("")
 
 
-# =========================
-# WELCOME SYSTEM
-# =========================
+# =========================================================
+# WELCOME MESSAGE FUNCTION
+# =========================================================
 
-@bot.event
-async def on_member_join(member: discord.Member):
+async def send_welcome(member: discord.Member):
+
+    print("")
+    print(
+        f"WELCOME EVENT: Preparing welcome for "
+        f"{member} ({member.id})"
+    )
 
     # Don't welcome bots
     if member.bot:
+        print("WELCOME SKIPPED: Member is a bot.")
         return
 
+    # Try cached channel first
     channel = member.guild.get_channel(WELCOME_CHANNEL_ID)
 
+    # Fallback to Discord API
     if channel is None:
-        print("Welcome channel could not be found.")
-        return
+
+        print(
+            "WELCOME: Channel not found in cache. "
+            "Trying Discord API..."
+        )
+
+        try:
+            channel = await bot.fetch_channel(WELCOME_CHANNEL_ID)
+
+        except Exception as error:
+            print(f"WELCOME ERROR: Could not find channel: {error}")
+            return
+
+    print(
+        f"WELCOME CHANNEL FOUND: "
+        f"{getattr(channel, 'name', 'Unknown')}"
+    )
+
+    # -----------------------------------------------------
+    # EMBED
+    # -----------------------------------------------------
 
     embed = discord.Embed(
         title=f"🕷️ Welcome to RealSpidy, {member.display_name}!",
@@ -175,67 +232,123 @@ async def on_member_join(member: discord.Member):
         color=discord.Color.red()
     )
 
-    # Member avatar
+    # User avatar
     embed.set_thumbnail(
         url=member.display_avatar.url
-    )
-
-    # Bottom GIF
-    embed.set_image(
-        url="attachment://welcome.gif"
     )
 
     embed.set_footer(
         text="🕸️ RealSpidy"
     )
 
+    # -----------------------------------------------------
+    # SEND WITH GIF
+    # -----------------------------------------------------
+
     try:
 
-        if not WELCOME_GIF.exists():
-            print(
-                f"Welcome GIF could not be found at: "
-                f"{WELCOME_GIF}"
+        if WELCOME_GIF.exists():
+
+            embed.set_image(
+                url="attachment://welcome.gif"
             )
-            return
 
-        gif = discord.File(
-            WELCOME_GIF,
-            filename="welcome.gif"
-        )
+            gif = discord.File(
+                str(WELCOME_GIF),
+                filename="welcome.gif"
+            )
 
-        await channel.send(
-            content=member.mention,
-            embed=embed,
-            file=gif
-        )
+            await channel.send(
+                embed=embed,
+                file=gif
+            )
 
-        print(
-            f"Welcome message sent for "
-            f"{member} ({member.id})"
-        )
+            print(
+                f"WELCOME SUCCESS: Message + GIF sent "
+                f"for {member}."
+            )
+
+        else:
+
+            # Welcome still sends even if GIF is missing.
+            print(
+                "WELCOME WARNING: welcome.gif was not found. "
+                "Sending welcome without GIF."
+            )
+
+            await channel.send(
+                embed=embed
+            )
+
+            print(
+                f"WELCOME SUCCESS: Message sent without GIF "
+                f"for {member}."
+            )
 
     except discord.Forbidden:
+
         print(
-            "Welcome Error: Bot does not have permission "
+            "WELCOME ERROR: RealSpidy does not have permission "
             "to send messages/files in the welcome channel."
         )
 
     except Exception as error:
-        print(f"Welcome Error: {error}")
+
+        print(f"WELCOME ERROR: {type(error).__name__}: {error}")
 
 
-# =========================
+# =========================================================
+# MEMBER JOIN EVENT
+# =========================================================
+
+@bot.event
+async def on_member_join(member: discord.Member):
+
+    print("")
+    print("=" * 50)
+    print(f"JOIN DETECTED: {member}")
+    print(f"USER ID: {member.id}")
+    print(f"SERVER: {member.guild.name}")
+    print("=" * 50)
+
+    await send_welcome(member)
+
+
+# =========================================================
+# TEST WELCOME
+# =========================================================
+
+@bot.command()
+@commands.is_owner()
+async def testwelcome(ctx):
+
+    print(
+        f"TEST WELCOME requested by "
+        f"{ctx.author} ({ctx.author.id})"
+    )
+
+    await send_welcome(ctx.author)
+
+    try:
+        await ctx.message.delete()
+    except discord.Forbidden:
+        pass
+
+
+# =========================================================
 # SETUP VERIFICATION MESSAGE
-# =========================
+# =========================================================
 
 @bot.command()
 @commands.is_owner()
 async def setupverify(ctx):
 
     if ctx.channel.id != VERIFY_CHANNEL_ID:
+
         await ctx.send(
             "❌ Run this command inside the verification channel."
         )
+
         return
 
     embed = discord.Embed(
@@ -265,25 +378,34 @@ async def setupverify(ctx):
             view=VerifyView()
         )
 
-        # Delete the !setupverify command message
+        print(
+            f"VERIFY SETUP: Verification message sent "
+            f"in {ctx.channel.name}."
+        )
+
         try:
             await ctx.message.delete()
         except discord.Forbidden:
             pass
 
     except discord.Forbidden:
+
         print(
-            "Setup Verify Error: Bot cannot send messages "
-            "in the verification channel."
+            "VERIFY SETUP ERROR: RealSpidy cannot send "
+            "messages in the verification channel."
         )
 
     except Exception as error:
-        print(f"Setup Verify Error: {error}")
+
+        print(
+            f"VERIFY SETUP ERROR: "
+            f"{type(error).__name__}: {error}"
+        )
 
 
-# =========================
-# COMMAND ERROR HANDLER
-# =========================
+# =========================================================
+# COMMAND ERROR HANDLING
+# =========================================================
 
 @setupverify.error
 async def setupverify_error(ctx, error):
@@ -291,17 +413,27 @@ async def setupverify_error(ctx, error):
     if isinstance(error, commands.NotOwner):
         return
 
-    print(f"setupverify command error: {error}")
+    print(f"setupverify ERROR: {error}")
 
 
-# =========================
+@testwelcome.error
+async def testwelcome_error(ctx, error):
+
+    if isinstance(error, commands.NotOwner):
+        return
+
+    print(f"testwelcome ERROR: {error}")
+
+
+# =========================================================
 # RUN BOT
-# =========================
+# =========================================================
 
 if TOKEN is None:
+
     raise ValueError(
         "DISCORD_TOKEN was not found. "
-        "Check your .env file or Railway Variables."
+        "Check Railway Variables."
     )
 
 
